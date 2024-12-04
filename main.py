@@ -1,9 +1,7 @@
 import asyncio
 import re
 from contextlib import asynccontextmanager
-from typing import Union
-from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, Depends, HTTPException
 from parser import get_page
 from starlette.concurrency import run_in_threadpool
 from sqlmodel import Field, SQLModel, create_engine, Session, select
@@ -44,38 +42,28 @@ def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
 
 
-def background_parser_sync():
-    import time
-    while True:
-        print("Hello!")
-        time.sleep(2)
-
-
 def add_item(session: Session, title: str, price: int):
-    # Проверяет, существует ли товар в базе данных. Если нет, добавляет новый товар.
     existing_item = session.exec(select(Prices).where(Prices.name == title)).first()
-    if not existing_item:  # Если товар не найден
-        new_item = Prices(name=title, cost=price)  # Создание новой записи
-        session.add(new_item)  # Добавление записи в сессию
-        session.commit()  # Сохранение изменений
-        session.refresh(new_item)  # Обновление объекта из базы
+    if not existing_item:
+        new_item = Prices(name=title, cost=price)
+        session.add(new_item)
+        session.commit()
+        session.refresh(new_item)
         print(f"Added to DB: {new_item}")
     else:
         print(f"Item already exists: {existing_item}")
 
 
 def clean_price(price_str: str) -> int:
-    # Удаляет ненужные символы (например, пробелы и знак валюты) из строки цены и преобразует ее в int.
-
-    cleaned_price = re.sub(r"[^\d]", "", price_str)
+    cleaned_price = re.sub(r"\D", "", price_str)
     return int(cleaned_price)
 
 
 async def background_parser_async():
     while True:
         print("Starting get price")
-        items = await run_in_threadpool(get_page)  # Получение данных из парсера
-        with Session(engine) as session:  # Открытие сессии
+        items = await run_in_threadpool(get_page)
+        with Session(engine) as session:
             for item in items:
                 try:
                     price = clean_price(item["price"])
